@@ -1,0 +1,271 @@
+---
+title: "kyadav1_Assignment3"
+author: "Khushboo Yadav"
+date: "10/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1.Importing Packages and reading data
+```{r}
+library('dplyr')
+library('caret')
+library('e1071')
+library('caret')
+library('ISLR')
+library('forecast')
+library('lubridate')
+library('pROC')
+library('tidyr')      # for reshaping data
+library('ggplot2')    # plotting data
+library('ggthemes')   # for scale_fill_few('medium')
+library('ztable')
+library("gmodels")
+library("naivebayes")
+FlightDelays <- read.csv("~/Desktop/MSBA/Machine Learning/Datasets/FlightDelays.csv")
+ print("Analyzing the dataset FlightDelays ")
+ str(FlightDelays)
+summary(FlightDelays)
+nrow(FlightDelays)
+
+
+```
+
+# 2.Data Transformation and clean up
+```{r}
+#2.1 Checking the NA values in the FLightDelays dataset
+NA_FLIGHT<-is.na.data.frame(FlightDelays) #(result: no NA values)
+
+#2.2 Converting distance into long/short categories
+FlightDelays$DISTANCE=ifelse(FlightDelays$DISTANCE<211.9,"SHORT","LONG")
+
+#2.3 Converting Flight.Status to 1,0
+FlightDelays$Flight.Status=ifelse(FlightDelays$Flight.Status=="delayed",1,0)
+
+#2.4 Categorizing CRS_DEP_TIME into 30 mins slots
+TIME_SLOT<- c(1:2201) 
+for (i in 1:dim(FlightDelays)[1])
+   {
+  if (between(FlightDelays$CRS_DEP_TIME[i],0600,0630))
+    { TIME_SLOT[i]<-"0600-0630" 
+  }
+ if (between(FlightDelays$CRS_DEP_TIME[i],0630,0700))
+    { TIME_SLOT[i]<-"0630-0700" 
+ }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0700,0730))
+    { TIME_SLOT[i]<-"0700-0730" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0730,0800))
+    { TIME_SLOT[i]<-"0730-0800" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0800,0830))
+    { TIME_SLOT[i]<-"0800-0830" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0830,0900))
+    { TIME_SLOT[i]<-"0830-0900" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0900,0930))
+    { TIME_SLOT[i]<-"0900-0930" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],0930,1000))
+    { TIME_SLOT[i]<-"0930-1000" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1000,1030))
+    { TIME_SLOT[i]<-"1000-1030" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1030,1100))
+    { TIME_SLOT[i]<-"1030-1100" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1100,1130))
+    { TIME_SLOT[i]<-"1100-1130" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1130,1200))
+    { TIME_SLOT[i]<-"1130-1200" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1200,1230))
+    { TIME_SLOT[i]<-"1200-1230" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1230,1300))
+    { TIME_SLOT[i]<-"1230-1300" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1300,1330))
+    { TIME_SLOT[i]<-"1300-1330" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1330,1400))
+    { TIME_SLOT[i]<-"1330-1400" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1400,1430))
+    { TIME_SLOT[i]<-"1400-1430" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1430,1500))
+    { TIME_SLOT[i]<-"1430-1500" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1500,1530))
+    { TIME_SLOT[i]<-"1500-1530" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1530,1600))
+    { TIME_SLOT[i]<-"1530-1600" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1600,1630))
+    { TIME_SLOT[i]<-"1600-1630" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1630,1700))
+    { TIME_SLOT[i]<-"1630-1700" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1700,1730))
+    { TIME_SLOT[i]<-"1700-1730" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1730,1800))
+    { TIME_SLOT[i]<-"1730-1800" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1800,1830))
+    { TIME_SLOT[i]<-"1800-1830" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1830,1900))
+    { TIME_SLOT[i]<-"1830-1900" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1900,1930))
+    { TIME_SLOT[i]<-"1900-1930" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],1930,2000))
+    { TIME_SLOT[i]<-"1930-2000" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],2000,2030))
+    { TIME_SLOT[i]<-"2000-2030" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],2030,2100))
+    { TIME_SLOT[i]<-"2030-2100" 
+   }
+   if (between(FlightDelays$CRS_DEP_TIME[i],2100,2130))
+    { TIME_SLOT[i]<-"2100-2130" 
+   }
+  
+  }
+#binding TIME_SLOT with FlightDelays df
+FlightDelays<-cbind(FlightDelays,TIME_SLOT)
+
+
+```
+```{r}
+# 2.5 Converting weeks days from number to names 
+
+DAY_OF_WEEK<-data.frame(c(1:2201))
+DAY_OF_WEEK<-as.character(DAY_OF_WEEK)
+
+for (i in 1:dim(FlightDelays)[1])
+{
+ifelse(FlightDelays$DAY_WEEK[i]=="1",
+       DAY_OF_WEEK[i]<-"Monday",
+        ifelse(FlightDelays$DAY_WEEK[i]=="2",
+          DAY_OF_WEEK[i]<-"Tuesday",
+                ifelse(FlightDelays$DAY_WEEK[i]=="3",
+                   DAY_OF_WEEK[i]<-"Wednesday",
+                        ifelse(FlightDelays$DAY_WEEK[i]=="4",
+                           DAY_OF_WEEK[i]<-"Thursday",
+                                ifelse(FlightDelays$DAY_WEEK[i]=="5",
+                                   DAY_OF_WEEK[i]<-"Friday",
+                                        ifelse(FlightDelays$DAY_WEEK[i]=="6",
+                                           DAY_OF_WEEK[i]<-"Saturday",
+                                                ifelse(FlightDelays$DAY_WEEK[i]=="7",
+                                                  DAY_OF_WEEK[i]<- "Sunday",NA)))))))}
+#binding the names of week in the FlightDelays df
+FlightDelays<-cbind.data.frame(FlightDelays,DAY_OF_WEEK)
+str(FlightDelays)
+
+```
+```{r}
+#2.6 Factorization of the predicting columns 
+
+FlightDelays$DAY_OF_WEEK<-as.factor(FlightDelays$DAY_OF_WEEK)
+FlightDelays$TIME_SLOT<-as.factor(FlightDelays$TIME_SLOT)
+FlightDelays$Weather<-as.factor(FlightDelays$Weather)
+FlightDelays$Flight.Status<-as.factor(FlightDelays$Flight.Status)
+FlightDelays$DAY_OF_MONTH<-as.factor(FlightDelays$DAY_OF_MONTH)
+FlightDelays$DISTANCE=as.factor(FlightDelays$DISTANCE)
+FlightDelays$ORIGIN<-as.factor(FlightDelays$ORIGIN)
+FlightDelays$CARRIER<-as.factor(FlightDelays$CARRIER)
+FlightDelays$DEST<-as.factor(FlightDelays$DEST)
+
+```
+# 3.Data Partitioning
+```{r}
+FlightDelay_New<-FlightDelays[,-c(1,3,6,7,10,12)] #Removed the unwanted columns
+print(" Flight dataset After removing unwanted columns:")
+
+summary(FlightDelay_New)
+
+set.seed(123)
+#Divide data into test and validation
+Index_Train<-createDataPartition(FlightDelay_New$Flight.Status, p=0.6, list=FALSE)
+Train <-FlightDelay_New[Index_Train,]
+Validation  <-FlightDelay_New[-Index_Train,]
+
+print("row count of Train and Validation dataset after partitioning respectively:")
+nrow(Train)
+nrow(Validation)
+
+```
+# Use the Naive Bayes model to predict whether the flight is delayed or not. Use only categorical variables for the predictor variables. Note that Week and Time variables need to recoded as factors.
+
+# 4.Naive Bayes Classification
+```{r}
+nb_model<-naiveBayes(Flight.Status~CARRIER+DEST+DISTANCE+ORIGIN+Weather+DAY_OF_MONTH+DAY_OF_WEEK+TIME_SLOT, data=Train)
+nb_model
+print("Output: As per the Apriori Probability , flight to be delayed has 0.1945496 probability.")
+```
+Output: We have found the result of conditional and A-priori probabilities. Flight to be delayed has 0.1945496 probability.
+
+
+# Output both a counts table and a proportion table outlining how many and what proportion of flights were delayed and on-time at each of the three airports.
+
+# 5.Count table and Proportion Table
+```{r}
+#5.1 Graphical representation of Flight Status with 3 different Origins
+
+FlightDelay_New%>% group_by(ORIGIN,Flight.Status)%>% 
+  ggplot(aes(FlightDelay_New,x= ORIGIN, y = Flight.Status,col=Flight.Status)) +
+  geom_col() +
+  ylab("Flight Count") 
+  
+
+# 5.2 Creation of ORIGIN_FLIGHT_STATUS table
+ORIGIN_FLIGHT_STATUS<-table(FlightDelays$Flight.Status,FlightDelays$ORIGIN)
+
+print("The ORIGIN_FLIGHT_STATUS table displays the count :")
+print(ORIGIN_FLIGHT_STATUS)
+
+print("Using ftable() to print the count of the table ORIGIN_FLIGHT_STATUS")
+ftable(ORIGIN_FLIGHT_STATUS)
+
+print(" Using prop.table() to display what proportion of
+flights were delayed and on-time at each of the three airports. ")
+
+prop.table(ORIGIN_FLIGHT_STATUS,margin=1)
+
+```
+# 6.Output the confusion matrix and ROC for the validation data
+
+```{r}
+# 6.1 Confusion Matrix
+Predicted_Test_labels <-predict(nb_model,Validation)
+# Show the confusion matrix of the classifier
+CrossTable(x=Validation$Flight.Status,y=Predicted_Test_labels, prop.chisq = FALSE) 
+confusionMatrix(Validation$Flight.Status,Predicted_Test_labels)
+```
+Result shows that  Accuracy is 0.8273 , Sensitivity is 0.8539 and Specificity is 0.6022 .
+Type I ERROR is 37 and Type II ERROR is 115.
+
+```{r}
+# 6.2 ROC curve
+Predicted_Test_2labels <-predict(nb_model,Validation, type = "raw")
+print("Predicted Test labels")
+
+head(Predicted_Test_2labels)
+
+roc(Validation$Flight.Status, Predicted_Test_2labels[,2])
+plot.roc(Validation$Flight.Status,Predicted_Test_2labels[,2])
+```
+#Area under the curve = 0.7406 .
