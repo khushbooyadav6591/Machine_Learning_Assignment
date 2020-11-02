@@ -1,0 +1,417 @@
+---
+title: "kyadav1_Assignment4"
+author: "Khushboo Yadav"
+date: "10/26/2020"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,error = TRUE)
+```
+
+## 1.Importing libraries and Loading "University Ranking" data 
+```{r}
+library(tidyverse)  # data manipulation
+library(factoextra) # clustering algorithms & visualization
+library(caret) #  model training process 
+library(e1071) # supports predict() , plot()
+library(dplyr) # supports data manipulations(select,filter,mutate)
+library(normalr) #normalization of large dataset
+library(fpc) # flexible procedure for clustering
+library(flexclust) # k-centroids ,cluster analysis supporting arbitrary distance measures and centroid computation
+library(stats) # for statistical calculations and random number generation
+library(ggplot2) # visualization of data
+library(ggfortify) # supports plotting tools for statistical clustering using ggplot2
+library(lattice) # data visualization
+library(ISLR)
+library(GGally)
+library(clusterSim)
+
+
+Universities <- read.csv("~/Downloads/Universities.csv")
+
+View(Universities)
+summary(Universities)
+str(Universities)
+```
+## 2. Data cleanup:-
+##  2.1 Removing the NA values from the dataset
+```{r}
+#Identifying the NA values from the University data
+
+colMeans(is.na(Universities))
+
+#Removing the NA values
+Universities_N<- na.omit(Universities) ## 471 observations
+```
+## 3. Data Manipulation :-
+##   3.1 Adding a new column to calculate acceptance rate
+##   3.2 Normalization of all the continuous data
+##   3.3 Distance calculation and visualization
+```{r}
+#Adding a new column i.e Acceptance rate
+Universities_N$AcceptanceRate<- Universities_N$X..appl..accepted/Universities_N$X..appli..rec.d
+
+#Creating new variable with all continuous measurements from dataset
+n_Universities<-Universities_N[,c(4:21)] 
+
+#Normalization of the continuous variables in the data frame
+Norm_Universities<-scale(n_Universities)
+
+str(Norm_Universities)
+
+#Calculating the distance of the normalized Universities data
+distance_Norm_Universities <- get_dist(Norm_Universities)
+
+#Visualization of the distance
+fviz_dist(distance_Norm_Universities)
+
+```
+
+## 4.For all the continuous measurements, run K-Means clustering. Make sure to normalize the measurements. How many clusters seem reasonable for describing these data? What was your optimal K?
+
+## 4.1 Kmeans
+```{r}
+set.seed(3689) # to get the same result in no. of clusters
+
+# Kmeans for the University Ranking dataset
+k3 <- kmeans(Norm_Universities, centers = 3, nstart = 25) # k = 3, number of restarts = 25
+
+k3$centers 
+k3$size 
+
+fviz_cluster(k3, data = Norm_Universities) # Visualize the output
+```
+
+
+## 4.2.Determining the Optimum value of K
+```{r}
+#To determine the optimum K value , using Silhouette Method
+
+
+fviz_nbclust(Norm_Universities, kmeans, method = "silhouette")
+
+```
+The Optimal no. of clusters = 3.
+
+## 5. Analyzing the characteristics of clusters:
+
+Since now we have 3 clusters, we can first get some statistical details about them by using cluster.stats() which 
+returns a list containing many components useful for analyzing the intrinsic characteristics of a clustering:
+
+```{r}
+
+#To compare the summary statistics of each cluster
+
+cluster.stats(distance_Norm_Universities,k3$cluster,alt.clustering = NULL)
+
+```
+All the above elements can be used to evaluate the internal quality of clustering:
+1.cluster.number: 3
+cluster.size: 46 ,150 ,275 , size of the three clusters respectively
+average.distance, median.distance: vector containing the cluster-wise within average/median distances
+average.between: 6.344849, We want it to be as large as possible
+average.within:  4.314419 ,average distance within clusters. We want it to be as small as possible
+Simmilarly , we can check the dunn value , avg silwidth and within.cluster.ss.
+
+## 6. Comparing the summaries of the clusters:
+```{r}
+#Now we can compare the summaries of the clusters
+cluster_description<-cluster.Description(Norm_Universities,k3$cluster,sdType = "sample")
+
+print( "Arithmetic Mean")
+cluster_description[1:3,,1] # this will show the Arithmetic mean of the 3 clusters
+
+print("Standard Deviation")
+cluster_description[1:3,,2]  #this will show the Standard Deviation of the 3 clusters
+
+print("Median")
+cluster_description[1:3,,3] # This will show the Median of the 3 three clusters
+
+
+
+```
+## 7. Assigning clusters to the rows of the University dataframe to analyze data based on clusters:-
+   
+```{r}
+#Adding new column 'cluster' to mention the cluster no. in dataset
+Norm_Universities_cluster <- data.frame(Norm_Universities,
+cluster = as.factor(k3$cluster))
+
+#Binding the 2 categorical measurements into the normalized University data
+Norm_Universities_cluster<-cbind.data.frame(Norm_Universities_cluster,Universities_N[,c(2:3)])
+head(Norm_Universities_cluster)
+
+#Creating subsets for each cluster based on the cluster number
+Norm_Universities_cluster1<-subset(Norm_Universities_cluster,Norm_Universities_cluster$cluster==1)
+Norm_Universities_cluster2<-subset(Norm_Universities_cluster,Norm_Universities_cluster$cluster==2)
+Norm_Universities_cluster3<-subset(Norm_Universities_cluster,Norm_Universities_cluster$cluster==3)
+```
+
+## 8.Compare the summary statistics for each cluster and describe each cluster in this context (e.g., “Universities with high tuition, low acceptance rate...”)
+
+```{r}
+#Using parallel plot for University data
+parallelplot(Norm_Universities_cluster)
+```
+
+##  9.1 Categorizing the data into below parts to understand the relation better:-
+
+## 1. Application received and Application accepted , Acceptance rate per cluster
+## 2. Total Students enrollment, students enrolled from top 10 and 25 schools
+## 3. FT undergraduate , PT undergraduate
+## 4. Tuition Fees
+## 5. Additional Expenses
+## 6. Student Faculity ratio and PHD Faculity
+## 7. Graduation Rate
+
+```{r}
+# 1.Applications received and Application accepted by clusters
+ggparcoord(Norm_Universities_cluster,columns=1:2,groupColumn = 19)
+
+#determining the acceptance rate of universities by clusters
+boxplot(AcceptanceRate~cluster, data=Norm_Universities_cluster)
+
+```
+##Interpretation of graph:
+Cluster 1: Highest level of application received and moderate  level in acceptance rate
+
+Cluster 2: Moderate level of application received and Lowest in the acceptance rate (less no of students got acceptance from these universities)
+
+Cluster 3: least no. application received and highest level in acceptance rate (more students get admission into these universities)
+
+```{r}
+# 2.Total Students enrollment,Students enrolled from top 10 and top 25
+ggparcoord(Norm_Universities_cluster,columns=3:5,groupColumn = 19)
+```
+##Interpretation of graph:
+Cluster 1:  Highest no. of new students enrollment however, least from  the top 10 and top 25  schools schools
+
+Cluster 2: Moderate no. of new students enrollment to the Universities however, highest in number of  students from top 10 and 25  schools
+
+Cluster 3: Moderate in the new students enrollment and  moderate number of students from top 10 and (moderate-lowest)from top 25
+
+```{r}
+# 3.FT undergraduate , PT undergraduate
+ggparcoord(Norm_Universities_cluster,columns=6:7,groupColumn = 19)
+```
+##Interpretation of graph:
+Cluster 1: Highest in Full-Time under graduation and as well as part-time  under graduation
+
+Cluster 2: Moderate level  of FT undergrad and PT undergrad
+
+Cluster 3: Lowest level of Full time under graduation and lowest level in part time under graduation
+
+```{r}
+# 4.Tuition Fees
+ggparcoord(Norm_Universities_cluster,columns=8:9,groupColumn = 19)
+```
+##Interpretation of graph:
+Cluster 1: In state tuition fees seems to be lowest and moderate level of out of state tuition fees
+
+CLuster 2: In state tuition fees seems to be highest and highest in out of state tuition fees
+
+Cluster 3: In state tuition fees seems to be between moderate to lowest  and lowest out of state fees
+
+```{r}
+# 5.Additional Expenses
+ggparcoord(Norm_Universities_cluster,columns=10:14,groupColumn = 19)
+```
+##Interpretation of graph:
+Cluster 1:moderate room and board expenses except for additional fees, books cost and personal expenses
+
+Cluster 2:Highest in room , board and estimated personal expenses  however, lower in estimated personal expenses and moderate additional fees (College might be providing some facilities to the students which leads lower personal expenses)
+
+Cluster 3:Lowest in room , board and books cost as well some spike in estimated book costs and personal expenses(some colleges might not be having sufficient books in the libraries to support all students)
+```{r}
+# 6.Student Faculity ratio and Faculity PHD
+ggparcoord(Norm_Universities_cluster,columns=15:16,groupColumn = 19)
+```
+##Interpretation of graph:
+Cluster 1: Moderate to high in no. of faculty with PHD degree and moderate level of no. of students per faculty(moderate level in quality of education for student)
+
+Cluster 2: Highest in no. of faculty with PHD and less students per faculty(Better education for the students)
+
+Cluster 3: Lowest in no. of faculty with PHD and more no. of students per Faculty (lowest in quality of education for student   )
+
+```{r}
+# 7.Graduation Rate
+Norm_Universities_cluster%>% group_by(cluster,Graduation.rate)%>% 
+  ggplot(aes(Norm_Universities_cluster,x= cluster, y = Graduation.rate,col=cluster)) +
+  geom_col() +
+  ylab("Graduation Rate") 
+
+```
+##Interpretation of graph:
+Cluster 1: Moderate level of graduation rate
+
+Cluster 2: Highest level of graduation rate
+
+Cluster 3: Lowest level of graduation rate
+
+
+With the help of above graphs , we can see that there is no positive association of public/private universities with clusters1 and cluster 3 however, there is strong relation between cluster 2 and Private university .Therefore with the help of table () , we can see ratio of public/private universities within clusters and understand more about the participation .
+
+
+## 10. Use the categorical measurements that were not used in the analysis (State and Private/Public) to characterize the different clusters. Is there any relationship between the clusters and the categorical information?
+
+```{r}
+# Relationship with categorized variable with clusters
+
+#Converting categorical variable to factors
+Norm_Universities_cluster$Public..1...Private..2.<- as.factor(Norm_Universities_cluster$Public..1...Private..2.)
+Norm_Universities_cluster$cluster<- as.factor(Norm_Universities_cluster$cluster)
+Norm_Universities_cluster$State <-as.factor(Norm_Universities_cluster$State)
+
+#Creating table of Public/Private Universities and cluster to determine the relation
+StateCluster_table= table(Norm_Universities_cluster$State,Norm_Universities_cluster$cluster)
+print(StateCluster_table)
+
+#Plotting Bar graph
+Norm_Universities_cluster%>% group_by(cluster,State)%>% 
+  ggplot(aes(Norm_Universities_cluster,x= cluster, y = State,col=State)) +
+  geom_col() +
+  ylab("States") 
+
+#Creating table of State and cluster to determine the relation
+PublicPrivatecluster_table = table(Norm_Universities_cluster$Public..1...Private..2.,Norm_Universities_cluster$cluster)
+print(PublicPrivatecluster_table)
+
+#Plotting Bar graph
+Norm_Universities_cluster%>% group_by(cluster,Public..1...Private..2.)%>% 
+  ggplot(aes(Norm_Universities_cluster,x= cluster, y = Public..1...Private..2.,col=Public..1...Private..2.)) +
+  geom_col() +
+  ylab("Public/Private Universities") 
+
+```
+As per the above analysis, we can see that:-
+Cluster 1: It is mainly public university
+Cluster 2: It is mainly private university
+Cluster 3: It is mostly private universities(with few public universities as well)
+
+however , there is was no specific relation between the states and the clusters
+
+Overall ,I have interpreted the clusters with below mentioned main features:-
+
+Cluster 1:-
+1. It is mainly public university
+
+2. Highest level of application received and moderate  level in acceptance rate
+
+3. Moderate level in the new students enrollment and  moderate number of students from top 10 and (moderate-lowest)from top 25 schools (seems to  be known good public universities)
+
+4. Highest in Full-Time under graduation and as well as part-time  under graduation
+
+5. In state tuition fees seems to be lowest and moderate level for out of state tuition fees (students outside states enrolling for the courses  chances of International students)
+
+6. Moderate room and board expenses except for additional fees, books cost and personal expenses
+
+7. Moderate to high in no. of faculty with PHD degree and moderate level of no. of students per faculty(moderate level in quality of education for student)
+
+8. Moderate level of graduation rate
+
+
+Cluster 2:-
+1. It is mainly private universities (Ivy League school)
+
+2. Moderate level of application received and Lowest in the acceptance rate (less no of students got acceptance from these universities)
+
+3. Moderate no. of new students enrollment to the Universities however, highest in number of  students from top 10 and 25  schools
+
+4. Moderate level  of FT undergrad and PT undergrad
+
+5. Highest in room , board and estimated personal expenses  however, lower in estimated personal expenses and moderate additional fees (College might be providing some facilities to the students which leads lower personal expenses)
+
+6. In state tuition fees seems to be highest and highest in out of state tuition fees
+
+7. Highest in no. of faculty with PHD and less students per faculty(Better education for the students-These Universities have more qualified faculty and assigning  them into small groups of students which provides better learning experience ) 
+
+8. Highest level of graduation rate
+
+
+Cluster 3:-
+1. It is partially private/public universities(with majority as private universities)
+
+2. least no. application received and highest level in acceptance rate (more students get admission into these universities)
+
+3. Highest no. of new students enrollment however, least from  the top 10 and top 25  schools
+
+4. Lowest level of Full time under graduation and lowest level in part time under graduation
+
+5. In state tuition fees seems to be between moderate to lowest  and lowest out of state fees
+
+6. Lowest in room , board and books cost as well some spike in estimated book costs and personal expenses(some colleges might not be having sufficient books in the libraries to support all students)
+
+7. Lowest in no. of faculty with PHD and more no. of students per Faculty (lowest in quality of education for student   )
+
+8. Lowest level of graduation rate
+
+
+
+
+
+## 11.What other external information can explain the contents of some or all of these clusters?
+Below are some external information which explains the content of some or all these clusters:-
+
+1. International Students :-
+International students are likely to get themselves enrolled in the Elite colleges(Public/Private) and  they are more focused towards their graduation completion.
+
+2. Ethnicity:-
+There are certain factors like Ethnicity which tells that students from a certain ethnic background performs better than other students.
+
+3. Male/Female students :- 
+Many studies shows that Female perform better in achieving educational success because they are more focused and better organized.
+
+6. Instructional Expenditure per student :-
+In cluster 2 , based on the results we can assume that student have provided with better facilities on the campus and therefore their personal and books expenses are less.for example: library , gym , transportation. Also , more no. of highly qualified faculties in the college helps them in getting better quality of education.
+
+
+
+## 12.Consider Tufts University, which is missing some information. Compute the Euclidean distance of this record from each of the clusters that you found above (using only the measurements that you have). Which cluster is it closest to? Impute the missing values for Tufts by taking the average of the cluster on those measurements.
+
+```{r}
+
+#Filtering the Tufts University data from the data frame
+Tufts_data<-filter(Universities,Universities$College.Name=="Tufts University")
+
+#selecting the continuous data
+Tufts_data<- Tufts_data[,c(4:20)]
+
+University_new <- n_Universities[,c(1:17)]
+
+#Normalization of the data
+train_norm_df <- University_new
+Tufts_norm_df <- Tufts_data 
+
+# use preProcess() from the caret package to normalize 
+norm_values <- preProcess(University_new, method=c("center", "scale"))
+
+train_norm_df <- predict(norm_values, University_new) 
+Tufts_norm_df <- predict(norm_values, Tufts_data) 
+
+
+# To determine the distance between centers and Tufts University,Binding the data with k3 centers
+k3centre_Tufts<-data.frame(rbind(k3$centers[,-18],Tufts_norm_df))
+
+#Distance
+distance_Tufts<- dist(k3centre_Tufts)
+print(distance_Tufts)
+
+#Minimum distance = closest cluster
+min(distance_Tufts) #2.75
+
+
+#Since I have found the closest cluster to the Tufts University which cluster 2 , we can now add the mean value of the cluster 2 to NA value of Tuft University record.
+
+# Using cluster_description to determine the mean of the 2nd cluster , 7th column (X..PT.undergrad)
+
+cluster_description[2,7,1]
+
+#Imputing the missing value in Tufts University data(Normalized data)
+Tufts_norm_df[,7]<- cluster_description[2,7,1]
+
+head(Tufts_norm_df)
+
+```
