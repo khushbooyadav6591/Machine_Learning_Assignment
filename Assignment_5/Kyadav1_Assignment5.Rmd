@@ -1,0 +1,629 @@
+---
+title: "Kyadav1_Assignment5"
+author: "Khushboo Yadav"
+date: "11/27/2020"
+output:
+  html_document: default
+  
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### 1. Importing Libraries and "Cereals" dataset
+
+```{r message=FALSE}
+library(dplyr)       # for data manipulation
+library(ggplot2)     # for data visualization
+
+# Modeling packages
+library(cluster)     # for general clustering algorithms
+library(factoextra)  # for visualizing cluster results
+library(NbClust)     # for Nbclust ()
+library(clValid)     #for cluster Validation
+library(caret)       # for data partition
+library(dendextend)  # for Visual comparison of dendrogram
+library(fpc)        # for stability
+
+Cereals <- read.csv("~/Downloads/Cereals.csv")
+
+
+#removing NA values only for the labeling purpose in dendrogram and last part
+Cereals_N<- na.omit(Cereals)
+
+```
+
+#### 2. Data pre-processing :
+
+##### 2.1. Removing columns (mfr, type,shelf) from the cereals dataset
+
+mfr,type,shelf are categorical variables and we can remove them .
+
+```{r message=FALSE}
+summary(Cereals)
+
+Cereals<-Cereals[,-c(2,3,13)]
+```
+
+##### 2.2. Normalization of the Cereal dataset
+```{r}
+Cereals_Norm<- sapply(Cereals[,-1], scale)
+```
+##### 2.3. Removing NA values from the normalised dataset
+
+```{r}
+Cereals_Norm<-na.omit(Cereals_Norm)
+```
+
+#### 3.Calculating the distance using the Euclidean method
+
+
+```{r}
+d <- dist(Cereals_Norm, method = "euclidean")
+
+```
+#### 4. Agglomerative Coefficient for each linkage method
+
+Agglomerative coefficient  is a measure of the clustering structure of the dataset.Closer to 1 leads to stronger structure.
+
+The coefficient values are basically the mean value of the normalized lengths at which the clusters are formed.
+
+Here, we will use Agglomerative coefficient on "Average","Singles","Complete" and "ward" methods.
+
+```{r}
+# Using Agnes to compare different methods
+
+# methods to assess
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(Cereals_Norm, method = x)$ac
+}
+
+# get agglomerative coefficient for each linkage method
+purrr::map_dbl(m, ac)
+```
+
+We can see that "ward method" has the highest Agglomerative coefficient.
+The coefficient value for the ward method is 0.904 , which is relatively closer to 1 which means that the cluster structure is good. 
+
+Therefore, ward method is the best fit for it, as it is giving the strongest cluster structure.
+
+
+
+Since, we have now finalized ward method , we can apply hierarchical clustering to the Euclidean distance to the normalized measurements:-
+
+#### 5.Apply hierarchical clustering to the data using Euclidean distance to the normalized measurements. 
+
+
+```{r message=FALSE}
+#Applying hierarchical Clustering to the using Euclidean distance to the normalized measurements
+
+hc_ward<- hclust(d,method="ward.D2")
+
+
+#Creating dendrogram for ward method
+
+plot(hc_ward,labels=Cereals_N$name,cex=.7) #ward
+
+```
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+#### 6.Comment on differences between hierarchical Clustering and K-means.
+
+K Means clustering needed an advance knowledge of  no. of clusters we want to divide our dataset.	In hierarchical clustering  we can stop at any number of clusters, we find appropriate by interpreting  the dendrogram which is a tree like structure.
+
+Hierarchical clustering can't handle big data well but K Means clustering can handle large dataset quite efficiently.When the dataset is small Hierarchical clustering can be really helpful in understanding the data as we can see the structure and distances in the dendrogram.
+
+
+
+#### 7.How many clusters would you choose?
+
+Lets look at the dendrogram  using ward method with height=10.
+
+If we cut the tree closer to the top, we get fewer clusters, and if we cut the tree closer to the bottom, we get more clusters.
+The y-axis represents the distances between cases. Horizontal lines indicate the positions at which cases/clusters merge with each other.
+Looking top to bottom we see that the split to 2 clusters causes a small drop in error and the  biggest splits occurs at 4 and 6 .
+
+At height 17 , there will be 2 clusters and at height 13 it will be 4 clusters  , when the height is 10 it is 6  clusters and similarly we can get more numbers of clusters if we go down in depth.
+
+
+I want  clusters to be interpretable and actionable. This in a way limits  number of clusters. Too many clusters will lead to  losing the ability to interpret the clusters . Less number of cluster might  risk towards generalizing , creating a simplistic treatment and missing the opportunity for a more tailored and effective approach.Also , later we would need to determine a cluster with a specific requirement.
+
+Therefore , I would like to keep the no. of optimal cluster within the range of 4-6.
+
+
+
+Let's use the elbow method and silhouette method to get some insight:
+  
+```{r}
+#Creating variable p1 ,p2  to store fviz_nbclust() output for different methods:
+
+ p1 <- fviz_nbclust(Cereals_Norm, FUN = hcut, method = "wss", 
+                     k.max = 6) +
+    ggtitle("(A) Elbow method")
+  p2 <- fviz_nbclust(Cereals_Norm, FUN = hcut, method = "silhouette", 
+                     k.max = 6) +
+    ggtitle("(B) Silhouette Method")
+   
+  
+  #Plotting  based on Silhouette Method and ELbow method :
+  gridExtra::grid.arrange(p1, p2, nrow = 1)
+```  
+
+After applying number of approaches and getting different results,I have realized that with different approaches and methods we are most likely to get different results.However , the most popular measure of cluster goodness is called the silhouette and Dunn's Index.
+
+Therefore,I have decided to use these 2 indexes i.e silhouette,dunn Index by  nbclust() to determine optimal numbers of clusters.
+
+
+The Silhouette Width and the Dunn Index combine measures of compactness and separation of the clusters. 
+
+* The Silhouette Width is the average of each observation's Silhouette value. The Silhouette value measures the degree of confidence in a particular clustering assignment and lies in the interval [-1,1], with well-clustered observations having values near 1 and poorly clustered observations having values near -1.
+
+* Dunn's index is the ratio between the minimum inter-cluster distances to the maximum intra-cluster diameter. The diameter of a cluster is the distance between its two furthermost points. In order to have well separated and compact clusters you should aim for a higher Dunn's index.It has a value between 0 and infinity and should be maximized.
+
+```{r}
+## Dunn's Index
+res_dunn<-NbClust(data= Cereals_Norm, distance = "euclidean", min.nc=4, max.nc=6, 
+             method = "ward.D2", index = "dunn")
+
+res_dunn$All.index
+res_dunn$Best.nc
+
+
+## Silhouette Value
+res_silhouette <- NbClust(data= Cereals_Norm, distance = "euclidean", min.nc=4, max.nc=6, 
+             method = "ward.D2", index = "silhouette")
+
+res_silhouette$All.index
+res_silhouette$Best.nc
+
+
+```
+Answer:
+  
+Based on the above output : The optimal number of clusters within the range of 4:8  will be 6.Therefore k=6
+
+Let's plot the dendrogram with 6 clusters and height = 9.5 .
+
+```{r}
+#cutting 
+set.seed(700)
+#Cutting the dendrogram in clusters
+hc_cut<-cutree(hc_ward,k=6)
+summary(as.factor(hc_cut)) 
+
+#plotting Dendrogram
+plot(hc_ward,labels=Cereals_N$name,cex=.5) #plotting hierarchical cluster labels=Cereals_N$name,
+rect.hclust(hc_ward , k = 6, border = 2:6) # Categorizing dendrogram into 6 clusters
+abline(h = 9.5, col = 'red') # plotting a line with height = 10
+```
+
+
+##### 8.Understanding of Hierarchical structure of the Cereal dataset:-
+
+Hierarchy of clusters, which is often represented graphically by means of a tree structure called a dendrogram. 
+Clusters of increasing similarity are merged to form larger ones (agglomerative algorithms) or that larger clusters are split into smaller ones of decreasing dissimilarities (divisive procedure). 
+
+Such an approach has the advantage of allowing exploration of the data at different levels of similarity/dissimilarity and providing a deeper insight into the relationships among sample objects. 
+
+
+#### Clusters :-
+
+Cluster1:Count= 3, Main Ingredients- All Bran and Extra fiber
+
+Cluster2:Count= 9, Main Ingredients- Raisin, Oatmeal, muesli  
+
+Cluster3:Count= 21,Main Ingredients- Apple,Honey,Cinnamon,Raisin
+
+Cluster4:Count= 10,Main Ingredients- Muesli Raisins,Dates and Nuts
+
+Cluster5:Count= 22, Main Ingredients- Rice ,Corn flakes, Chex and Flakes
+
+Cluster6:Count= 9,Main Ingredients- Wheat 
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+####  9.Comment on the structure of the clusters and on their stability. Hint: To check stability,partition the data and see how well clusters formed based on one part apply to the other part. 
+
+#### Assess how consistent the cluster assignments are compared to the assignments based on all the data.
+
+
+
+Website used for reference :
+http://activisiongamescience.github.io/2016/08/19/Assessing-Stability-of-K-Means-Clusterings/
+
+* When a new object in inserted/removed from a existing dendrogram it may cause that some two existing partitions will get closer or     more distant. 
+* If there is not much changes in the structure of the dendrogram it is considered to be stable. 
+
+##### Steps followed:
+##### 9.1.Partionng the data
+##### 9.2.Normalization
+##### 9.3.Calculating distance using euclidean method
+
+```{r}
+set.seed(666) # to generate the same result
+
+#Data Partitioning :
+# random 80% of data been partitioned from the original data
+
+Index_Train<-createDataPartition(Cereals$rating, p=0.8, list=FALSE)
+Train_Data <-Cereals[Index_Train,]
+Train_Data_NN<- na.omit(Train_Data)
+nrow(Train_Data)
+#normalization of the partitioned data
+Cereals_No<- sapply(Train_Data[,-1], scale)
+
+#removing NA value
+Cereals_No<- na.omit(Cereals_No)
+
+#Calculation of distance
+do <- dist(Cereals_No, method = "euclidean")
+```
+
+##### 9.4.Determining Agglomeretive coefficient:-
+
+```{r}
+
+
+# Using Agnes to compare different methods
+
+# methods to assess
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac <- function(x) {
+  agnes(Cereals_No, method = x)$ac
+}
+
+# get agglomerative coefficient for each linkage method
+purrr::map_dbl(m, ac)
+
+ag<-agnes(Cereals_No, metric = "euclidean", method = "ward")
+ag$ac #0.9620709 will not work unless agnes () is used to determine HC
+```
+
+Again "ward method" has the highest Agglomerative coefficient.
+The coefficient value for the ward method is 0.8923850 , which is lesser than the value with original data.
+One of the reason is due to the reduction in the data size .
+
+
+##### 9.5.Hierarcical Clustering  and plot
+
+```{r}
+# Determining the hierarchical clustering
+hc_ward2<- hclust(do,method="ward")
+
+#Plot generation of hierarchical clustering
+plot(hc_ward2,labels=Train_Data_NN$name,cex=.7)
+rect.hclust(hc_ward2 , k = 6, border = 2:6)
+abline(h = 10, col = 'red')
+
+hc_cut2<-cutree(hc_ward2,k=6)
+summary(as.factor(hc_cut2)) #Counting the number of objects in each cluster
+```
+
+##### Clusters:-
+
+Cluster1: Count = 3,  Main Ingredients- All Bran and Extra fiber
+
+Cluster2: Count = 7,  Main Ingredients- Muesli Raisins,Dates and Nuts
+
+Cluster3:Count = 17,  Main Ingredients- Apple,fruits
+
+Cluster4:Count = 9,   Main Ingredients- Wheat
+
+Cluster5:Count = 16,  Main Ingredients- Rice ,Corn flakes, Chex and Flakes
+
+Cluster6:Count = 9,  Main Ingredients- Raisin, Oatmeal, meusli  multigrain/wheat apple raisin cheerios
+
+
+Since , we have removed 20 percent of data from the original, we can see that some of cereals are not present in the clusters.
+Overall on highlevel, I can see some changes in the clusters formed after the removal of slice of data.
+
+
+We can understand the changes better by doing visual comparison of the dendrogram and later by determing the value for stability of clusters formed in the dendrogram:-
+
+
+##### Steps followed:-
+
+1. Creating variables for original data and partitioned data
+
+2. Creating a list to hold dendrograms
+
+3. Analyzing the changes occurs in the relation of the variables before /after removing  small set of data from the original
+
+4. Comparing the structure dendrograms and Interpretations for stability
+
+5. Calculating Stability 
+
+
+
+
+##### 9.6.Visual Comparison of  the dendrogram :-
+
+Website used for reference:
+http://activisiongamescience.github.io/2016/08/19/Assessing-Stability-of-K-Means-Clusterings/
+
+
+```{r message=FALSE}
+
+#Creating Dendrogram
+dend1 <- as.dendrogram (hc_ward) # original data hierarchical clustering
+dend2 <- as.dendrogram (hc_ward2) #partitioned data hierarchical clustering
+
+#Adding labels to the dendrogram
+labels(dend1)<-Cereals_N$name  #full dataset
+labels(dend2)<-Train_Data_NN$name # partial dataset
+
+# Adjusting the size of the labels
+labels_cex(dend1)<-0.5 
+
+labels_cex(dend2)<-0.5
+
+# Create a list to hold dendrograms
+dend_list <- dendlist(dend2, dend1)
+```
+
+
+
+
+##### 6.1 Analyzing the difference in the Dendrogram branches:
+
+
+The unique nodes can be explained in more detailed by dend_diff().
+
+```{r}
+ #Plotting trees side by side and highlighting the unique to each tree in red 
+   dend_diff(dend1, dend2)
+
+```
+
+
+The dend_diff function plots two trees side by side, highlighting edges unique to each tree in red. 
+We can see lot Unique nodes in the dendrogram above . Here, the difference in data is not pruned . 
+
+Left side Dendrogram is based on the  original data  and right side is based on the partitioned data.We can see that there is lot of unique branches
+
+##### 6.2 Using tanglegram() to compare the  Dendrogram side by side
+
+```{r message=FALSE}
+# Align and plot two dendrograms side by side
+  tanglegram(dend_list,fast=FALSE,highlight_distinct_edges = TRUE, # Turn-off dashed lines
+    common_subtrees_color_lines = TRUE, # Turn-on line colors
+    common_subtrees_color_branches = TRUE) # Color common branches ) 
+```
+
+#### Interpretation of the comparison:-
+
+Since ,we have only used 80 percent of the data,to compare the 2 dendrograms  additional data from the original were pruned for comparison.
+
+Note:-
+We see the horizontal connecting line between the two dendrograms but, however  these trees are not identical (or even very similar topologically).
+
+
+#### Observations:-
+
+1.We can see that there is  movement in the positions of the clusters after removing some data from the original.
+
+2.We can some common connecting lines in colors(Blue,green,orange,pink) , which means there are  sub-trees which are present in both dendrograms.So,some of  the pairs remained same as before. 
+For example : At the bottom  we can see pink color horizontal lines  for " All-Bran, 100% Bran " items which means they are present in both dendrograms and shows good similarity.
+
+
+3.“Unique” nodes, with a combination of items not present in the other tree, are highlighted with dashed lines.
+For example: We can see at the root there are dashed lines which means the combination of items into those  branches are unique to each other.
+
+4.The colored branches of the trees to show the two common sub-trees using common_subtrees_color_branches = TRUE.
+For example: At the bottom  we can see pink color  lines  for  " All-Bran, 100% Bran " items. It means their subtree branch is  present in both dendrograms. 
+
+#### Result for the visual comparison :
+
+ With the help of different visual comparison of dendrograms we can say that, the clusters are not highly stable as the correlation of the the variables changes with removal of data.There is some similarity and dissimilarity in the pattern of cluster segmentation which can be seen in the dendrograms.
+
+We can also  quantify the result by using clusterboot() on the partitioned data. 
+
+
+
+##### 6.3 Cluster Stability in calculation
+
+Web site used for reference :
+https://www.rdocumentation.org/packages/fpc/versions/2.2-8/topics/clusterboot
+
+```{r}
+
+set.seed(11)
+#Input the scaled cereals_data
+hclust_stability = clusterboot(Cereals_No, clustermethod=hclustCBI, method="ward.D2", k=6, count = FALSE)
+hclust_stability
+```
+
+
+#### Interpretation of  the clustering stability results:-
+
+Stability guidelines :-
+
+1.Values > 0.85  =""Highly Stable
+
+2.Values >0.75 ="Stable"
+
+3.Values Between 0.6 and 0.75 = "show some pattern towards stability but needs some more investigation"
+
+4.Below 0.6="should not be trusted"
+
+
+* Values > 0.85 denote very stable clusters. Here ,we can see that when the number of cluster =6 , the stability comes 0.72 . which is   lower than 0.85. the clusters show some patterns however it needs to be investigated further.
+
+* Clusters were dissolved  25 times out of 100 re-sampling runs, the least the count of dissolved cluster better comes the stability.
+Here ,the stability is not good enough however it surely  shows some patterns, which can be improved.
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+#### 9. The elementary public schools would like to choose a set of cereals to include in their daily cafeterias. Every day a different cereal is offered, but all cereals should support a healthy diet. For this goal, you are requested to find a cluster of “healthy cereals.” 
+
+
+Websites used for determining "Healthy Cereals"  reference :-
+
+https://www.realmomnutrition.com/how-to-choose-a-healthy-cereal/
+https://www.bestkidstuff.com/food/healthiest-cereal-for-kids/
+
+Based on the above websites I have considered 5 nutrition elements in cereals dataset .Please find them below in the order of importance:-
+
+1.Sugars(lesser the better)
+
+2.Fat(lower the better)
+
+3.Fiber(higher the better)
+
+4.Protein (higher the better)
+
+5.Calories(lesser the better)
+
+6.Vitamins and minerals(higher the better)
+
+
+Note: I have not considered cups and weight variable as It will make analysis complex.
+
+#### Should the data be normalized? If not, how should they be used in the cluster analysis?
+ 
+We don't need to normalize the data for the analysis as we are determining the values for each  feature separately and we do not need to calculate the distance between them.
+
+Also, Scaling will lead to mean of "0" and standard deviation of "1". I am using mean value for each cluster feature to determine the 'healthy Cereal' cluster.Therefore , using normalized values will not help .
+
+
+
+```{r}
+
+# Determining the mean value for each category important for categorizing snacks under "Healthy "
+tapply(Cereals_N$sugars, hc_cut, mean) # lower the mean value of Sugar higher for health ##Cluster 6
+tapply(Cereals_N$fat, hc_cut, mean)  # least the better ##cluster 6
+tapply(Cereals_N$fiber, hc_cut, mean)  # higher in fiber better for health #cluster 1
+tapply(Cereals_N$protein, hc_cut, mean) # higher the mean value of Protein better for health ##cluster 1
+tapply(Cereals_N$calories, hc_cut, mean) # lesser in number good for health  ##cluster 1
+tapply(Cereals_N$vitamins, hc_cut, mean) #higher in vitamins, good for health ##cluster 4
+
+```
+
+#### Using Boxplots to visualize the analysis :-
+
+
+```{r}
+
+#Visualization of understanding the features of clusters based on the requirement:-
+
+boxplot(Cereals_N$sugars ~ hc_cut,xlab="clusters",ylab="sugar in grams",col="sky blue")
+boxplot(Cereals_N$fat ~ hc_cut,xlab="clusters",ylab="fat in grams",col=" brown")
+boxplot(Cereals_N$fiber ~ hc_cut,xlab="clusters",ylab="fiber in grams",col="pink")
+boxplot(Cereals_N$protein ~ hc_cut,xlab="clusters",ylab="Protein in grams",col="orange")
+boxplot(Cereals_N$calories ~ hc_cut,xlab="clusters",ylab="calories per serving",col="grey")
+boxplot(Cereals_N$vitamins ~ hc_cut,xlab="clusters",ylab="vitamins and minerals - 0, 25, or 100, indicating the typical percentage of FDA recommended",col="magenta")
+
+```
+
+As per the results,We can see that cluster 1  is lowest in calories, highest in Fiber,Protein and second lowest in sugar content.
+Therefore ,We can conclude that Cluster 1 seems to be the "healthy Cluster".
+
+#### Determining the Healthy Cereals cluster :-
+
+
+```{r}
+#Creating subset with dataset in cluster 1(Healthy Snacks cluster)
+cluster1<-subset(Cereals_N,hc_cut==1)
+
+#Cluster 1 cereals names:-
+cluster1$name
+```
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+#### 10. How do you compare hierarchical clustering and k-means? What are they main advantages of hierarchical clustering compared to k-means?
+
+
+Answer:-
+
+##### Comparing the Hierarchical Clustering and k-means:-
+
+
+1.Directional approach:-
+
+In K means only centroid is considered to form clusters, 
+
+Hierarchical Clustering :Top-down, bottom-up approaches are followed
+
+                        
+2. Understanding of data :- 
+
+K means: the understanding of data is not that clear however, 
+
+Hierarchical Clustering : the method shows all the possible linkages between the clusters  so we  we understand the data much better.
+
+                    
+3.Value of K:-
+
+In K means: we need preset the value of k (no. of clusters)
+
+Hierarchical clustering :No need to preset the number of clusters 
+
+
+4.Results:-
+
+ K means: the result of running the algorithm multiple times may lead to different results ,
+ 
+ Hierarchical clustering: however in Hierarchical clustering the results remain the same with multiple runs.
+ 
+ 
+5.Knowledge of K:-
+
+K Means : clustering needed advance knowledge of K i.e. no. of clusters one want to divide your data.
+
+Hierarchical Clustering : one can stop at any number of clusters, one find appropriate by interpreting  the dendrogram.
+
+ 
+6: Volume of Data :
+
+K means: works well with high Volume of data and therefore less computational cost
+
+Hierarchical Clustering: doesn't work well with high volume of data as compare to K means , as it becomes difficult to understand the data with huge volume
+
+
+
+
+
+##### Advantages of Hierarchical Clustering over K means:-
+
+1.The main benefit of hierarchical clustering over k-means, is that we get a much finer understanding of the structure of our data, and it is often able to reconstruct real hierarchies in nature.  
+ 
+2. No Apriori information about number of clusters is required and it is easy to implement.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
