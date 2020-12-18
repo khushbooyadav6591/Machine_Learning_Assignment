@@ -1,0 +1,765 @@
+---
+title: "Kyadav1_FinalAssignment"
+author: "Khushboo Yadav"
+date: "12/15/2020"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE) 
+```
+
+
+#### 1.Importing Library and loading BathSoap dataset
+
+```{r message=FALSE,include=TRUE,results='hide'}
+library(dplyr)
+library(tidyverse)  # data manipulation
+library(factoextra) # clustering algorithms & visualization
+library(caret)      #  model training process 
+library(e1071)      # supports predict() , plot()
+library(dplyr)      # supports data manipulations(select,filter,mutate)
+library(normalr)    #normalization of large dataset
+library(fpc)        # flexible procedure for clustering
+library(flexclust)  # k-centroids ,cluster analysis supporting arbitrary distance measures and centroid computation
+library(stats)      # for statistical calculations and random number generation
+library(ggplot2)    # visualization of data
+library(ggfortify)  # supports plotting tools for statistical clustering using ggplot2
+library(lattice)    # data visualization
+#install.packages("webshot")
+#webshot::install_phantomjs()# for resolving html () problem in knitting
+library('e1071')
+library('caret') 
+library('pROC')    # for Naive Bayes roc
+
+library(ggplot2)   # visualization of data
+library(ggfortify) # supports plotting tools for statistical clustering using ggplot2
+library(lattice)   # data visualization
+library('klustR')  # pacoplot
+#Loading Bath Soap data :
+BathSoap <- read.csv("~/Downloads/BathSoap.csv")
+```
+
+#### 2. Checking NA values
+```{r ,include=TRUE,results='hide'}
+#Checking NA values
+sapply(BathSoap, function(x) sum(is.na(x))) ## No NA
+
+
+```
+---------------------------------------------------------------------------------------------------------------------------------------
+
+####  3. Use k-means clustering to identify clusters of households based on:
+
+##### a. The variables that describe purchase behavior (including brand loyalty)
+
++ After analyzing the data , we can consider  below variables to understand Customer's Purchase behaviour :-
+
+
+1.No. of Brands
+
+2.Brand Runs
+
+3.Total Volume
+
+4.No. of transaction
+
+5.Value
+
+6.Trans Brand Runs
+
+7.Volume transaction
+
+8.Average Price
+
+9.Others999
+
+10.Max Brand (Explained below)
+
+
+##### Max Brand:
+
+Since CRISA marketing agency is using data for general marketing purposes , a customer who is loyal to Brand 1 is same as a customer who is loyal to Brand 2.They both will be equally loyal for the agency.
+
+If we include all the brand shares into the data the clustering would treat them differently,however for the general marketing data analysis , it should be treated same.
+
+Therefore,we will create a variable which will have the maximum of all the purchase share.
+
+
+
+```{r,message=FALSE,include=TRUE,results='hide'}
+#Creating new column Max_Brand
+
+BathSoap$newcolumn<-NA  #Creating new column
+names(BathSoap)[47]<-'Max_Brand' #Assigning Name to the column
+as.matrix(BathSoap)
+
+#max to one brand
+BathSoap$Max_Brand<-apply(BathSoap[,c(23:30)],1,max)
+```
+
+```{r}
+
+Purchase_Behaviour_df <- BathSoap[,c(12:19,31,47)] #sex,age,no. of brands,avg price,Pur.Vol.No.Promo
+str(Purchase_Behaviour_df)
+
+
+#Converting percentage to numeric by removing percentage sign
+Purchase_Behaviour_df[,c(9,10)] <- data.frame(sapply(Purchase_Behaviour_df[,c(9,10)], function(x) as.numeric(gsub("%", "", x))))
+
+
+#normalizing  values:
+Purchase_Behaviour_norm <- sapply(Purchase_Behaviour_df, scale)
+
+#Calculating the distance of the normalized Universities data
+distance_Purchase_Behaviour_norm <- get_dist(Purchase_Behaviour_norm)
+
+#Visualization of the distance matrix
+fviz_dist(distance_Purchase_Behaviour_norm)
+```
+
+#### 3. b. The variables that describe the basis for purchase(price, selling proposition)
+
+
+After analyzing the data , we can consider  below variables to understand Customer's Purchase behaviour :-
+
+1. Promotion vol
+
+1. Price : Pr.Cat1 ,Pr.Cat2 ,Pr.Cat3 ,Pr.Cat4
+
+2. Selling Propositions : Prop_Cat5,....Prop_Cat15
+
+
+Analyzing Selling Propositions:
+
+```{r}
+ # Lets analyze the Selling Prepositions for 
+Selling_Prop<- BathSoap[,c(36:46)]
+
+# Replacing % sign from the data
+Selling_Prop <- data.frame(sapply(Selling_Prop, function(x) as.numeric(gsub("%", "", x))))
+
+#Mean value for each variable
+summary(Selling_Prop)
+
+#Visualization
+boxplot(Selling_Prop)
+```
+
+The Boxplot and summary statistics  for selling proposition depicts that only Selling Proposition-5(PropCat5) has received significant response from the customers.It has more highest percentage of households investing more that 10% of the total purchase volume.
+
+The rest of the selling propositions have less than 10 % response .
+
+
+Therefore , It is better to exclude rest of the selling propositions categories and include only Selling Proposition-5(PropCat5) into the model.
+
+
+#### Basis of purchase:
+```{r}
+
+Basis_Purchase_df<-BathSoap[,c(20:22,32:36)]
+Basis_Purchase_df <- data.frame(sapply(Basis_Purchase_df, function(x) as.numeric(gsub("%", "", x))))
+
+str(Basis_Purchase_df)
+class(Basis_Purchase_df)
+
+#Normalization
+Basis_Purchase_norm <- sapply(Basis_Purchase_df, scale)
+
+#Calculating the distance of the normalized Universities data
+distance_Basis_Purchase_norm <- get_dist(Basis_Purchase_norm)
+
+#Visualization of the distance
+fviz_dist(distance_Basis_Purchase_norm)
+
+```
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+#### 3.c The variables that describe both purchase behavior and basis of purchase In each case, choose the number of segments (k). You may combine the existing variables to create alternative measures of loyalty and include them in the analysis.
+
+
+#### Combining the purchase behavior and basis of purchase
+
+
+```{r}
+#Including all the variables from Purchase behaviour and basis of purchase
+
+Basis_Behaviour_Purchase_df<-cbind.data.frame(Purchase_Behaviour_df,Basis_Purchase_df)
+
+#Normalization of the data
+Basis_Behaviour_Purchase_norm <- sapply(Basis_Behaviour_Purchase_df, scale)
+
+#Calculating the distance of the normalized Universities data
+distance_Basis_Behaviour_Purchase_norm <- get_dist(Basis_Behaviour_Purchase_norm)
+
+#Visualization of the distance
+fviz_dist(distance_Basis_Behaviour_Purchase_norm)
+
+```
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+#### 4. Note 1: How should k be chosen? Think about how the clusters would be used. It is likely that the marketing efforts would                      support two to five different promotional approaches.
+
+#### Answer:-
+
+K should be chosen on the basis of minimum intra-cluster distance and maximum distance between the clusters.
+As it was mentioned that marketing efforts would support least 2-5 different promotional approaches,Therefore I would like to keep the range for the k within 2-5. 
+
+Clusters should be interpretable and actionable. This in a way limits  number of clusters. Too many clusters will lead to  losing the ability to interpret the clusters . Less number of cluster might  risk towards generalizing , creating a simplistic treatment and missing the opportunity for a more tailored and effective approach.
+
+#### Method to determine optimal value of k:
+
+* The Silhouette Width is the average of each observation's Silhouette value. The Silhouette value measures the degree of confidence in a particular clustering assignment and lies in the interval [-1,1], with well-clustered observations having values near 1 and poorly clustered observations having values near -1.
+
+
+#### 4.1 Determining the best K values for Purchase_Behaviour,Basis_purchase,Basis and Behaviour of purchase
+
+To determine the optimal value of k , using silhouette and dunn's Index method for each of the categories:-
+
+```{r}
+
+#Creating variable p1 ,p2  to store fviz_nbclust() output for different methods:
+
+P1<-fviz_nbclust(Purchase_Behaviour_norm, kmeans, method = "silhouette",k.max=5) + ggtitle("Purchase Behaviour")
+P2<-fviz_nbclust(Basis_Purchase_norm, kmeans, method = "silhouette",k.max=5) + ggtitle("Basis for Purchase")
+P3<-fviz_nbclust(Basis_Behaviour_Purchase_norm, kmeans, method = "silhouette",k.max=5)+ ggtitle("Basis for purchase + Purchase Behaviour")
+   
+  
+  #Plotting  based on Silhouette Method and ELbow method :
+  gridExtra::grid.arrange(P1, P2,P3, nrow = 1)
+
+ 
+```
+
+Result:
+As per the silhouette method we can see that the optimal value forthe below :-
++ Purchase Behavior ,k= 2 , 
++ Basis of purchase k= 4 and 
++ the combination of both has optimal k =5.
+
+
+
+
+#### Kmeans for Purchase Behavior, when k=2
+
+
+pacoplot:Creates an interactive parallel coordinates plot detailing each dimension and the cluster associated with each observation.
+
+
+Website used for reference :- https://www.rdocumentation.org/packages/klustR/versions/0.1.0/topics/pacoplot
+Note:
+I have used pacoplot for cluster associated observations, however due to them to be html widgets, they do not appear in the knitted documentation.
+
+```{r}
+
+#When K=2,
+set.seed(123)
+kmeans2_Purchase_Behaviour <- kmeans(Purchase_Behaviour_norm, centers = 2) #kmeans for Purchase Behaviour
+
+kmeans2_Purchase_Behaviour$size
+
+
+fviz_cluster(kmeans2_Purchase_Behaviour, data = Purchase_Behaviour_norm)
+
+
+kmeans2_Purchase_Behaviour$withinss
+
+
+kmeans2_Purchase_Behaviour$betweenss
+
+
+
+#Visualization of the data to understand the features of the clusters within each segment:
+
+pacoplot(data = Purchase_Behaviour_norm, clusters = kmeans2_Purchase_Behaviour$cluster)
+
+
+
+```
+
+#### Observations and Results for Purchase behavior:-
+
+
++ size : 265,335
++ withinss : 2460.28 2256.83
++ betweenss :1272.891
+
+
++ Cluster1(Orange):
+This cluster seems to buys more from other 999 brands and have highest no. of brands and brand runs but their                           transaction volume is low. Therefore ,lowest in brand loyalty.
+
+
++ Cluster2:
+This cluster seems to be highest in brand loyalty and they have highest volume of transactions and Transaction brand runs.
+
+
+Lets , find the kmeans for "Basis for Purchase " when k=4 :
+
+```{r}
+#When K=4
+set.seed(789)
+kmeans4_Basis_Purchase<- kmeans(Basis_Purchase_norm, centers = 4)
+
+fviz_cluster(kmeans4_Basis_Purchase, data = Basis_Purchase_norm)
+#size
+kmeans4_Basis_Purchase$size
+#withiness
+kmeans4_Basis_Purchase$withinss
+
+#betweenss
+kmeans4_Basis_Purchase$betweenss
+
+
+#Cluster Visualization
+pacoplot(data = Basis_Purchase_norm, clusters = kmeans4_Basis_Purchase$cluster)
+
+
+```
+
+
+##### Observation and Results for Basis  for purchase :-
+
++ Cluster size :  74 320  19 187
+
++ withiness :553.9459 1108.6059  292.4255 1007.2238
+
++ betweenss :1829.799
+
++ Basis of Purchase :
+
++ CLuster 1:Customers purchasing without responding to promotions and responding price category 1 and 2 with selling propositions.
+
++ Cluster 2:Customers  not responding to promotions and responding to chosen selling proposition and price category 2&4
+
++ Cluster 3:Customers neutral towards promotions however responding to selling propositions and price category 1 and 2
+Customers not responding to promotions and price category 3
+
++ Cluster 4:Customers are purchasing without any promotions however responding to price category 2 and selling propositions.
+
+
+# kmeans for Basis and purchase behavior combined when K=5 :
+
+```{r}
+set.seed(666)
+
+kmeans5_Basis_Behaviour_Purchase <- kmeans(Basis_Behaviour_Purchase_norm, centers = 5)
+
+
+fviz_cluster(kmeans5_Basis_Behaviour_Purchase, data = Basis_Behaviour_Purchase_norm)
+#size
+
+kmeans5_Basis_Behaviour_Purchase$size
+
+#withinss
+
+kmeans5_Basis_Behaviour_Purchase$withinss
+
+#betweenss
+
+kmeans5_Basis_Behaviour_Purchase$betweenss
+```
+
+```{r,screenshot.alt}
+#Visualization
+pacoplot(data = Basis_Behaviour_Purchase_norm, clusters = kmeans5_Basis_Behaviour_Purchase$cluster,labelSizes=list(yaxis=6, yticks = 10, tooltip = 15))
+
+
+
+```
+
+
+#### Observation and Results of Basis and Purchase Behaviour:-
+
+
++ Cluster size :132 175  66 172  55
+
++ withiness :1639.2775 1924.4079  747.9557 1727.6913  603.6403
++ betweeness: 4139.027
+
+
+##### Characteristics of each clusters :-
+
++ Cluster 1(Blue):
+
+The Customers ares Non Loyal to the Brands ,purchases from lot of different brands with high transaction volume and value and interestingly do not responds to the promotional offers and highly responds to the priceCategory1 and 2
+
+
++ CLuster 2(Orange):
+
+Cluster of customer show high  brand loyalty and  sometimes not loyalty(neutral) ,we can call them as "grey clusters" does not responds to promotional offers but responds to selling propositions.
+
++ Cluster 3(Green):
+Brand Loyal customers with higher transaction brand runs  , does not responds to Promotional offers and does shopping Price category3
+
+
+
++ Cluster 4:(Red)
+
+non brand loyal customers purchasing other brands in high volume and responding to price category 2 and promotional offers.
+
++ Cluster 5:(Purple)
+
+Non Brand Loyal customers purchasing high numbers of different brands and responding to promotional and price category 1 and selling proposition chosen.
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+#### 5. Note 2: How should the percentages of total purchases comprised by various brands be treated? Isn’t a customer who buys all                    brand A just as loyal as a customer who buys all brand B? What will be the effect on any distance measure of using the                 brand share variables as is? Consider using a single derived variable.
+
+
+##### Answer:
+
+The Percentage of total purchases should be treated cumulative.Considering them individually  will lead to increment in the inter cluster distances.
+A customer who buys all brand A is just as loyal as a customer who buys brand B.Both are fully devoted to their Brands and hence they are brand loyal.Including all the variables in the then for each brand their customer will be treated differently.
+Therefore, we have created a derived variable which determines the maximum share of the percentage of total share.
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+#### 6. Select what you think is the best segmentation and comment on the characteristics (demographic,brand loyalty, and basis for            purchase) of these clusters. (This information would be used to guide the development of advertising and promotional                   campaigns.) 
+
+##### Answer:
+I believe , the Segment having details of both Purchase Behavior and basis of purchase should be considered as the best segment .
+
+Reason:
+
+Having more data is always a good idea, specially when the client is looking for more number of promotional approaches.
+For example, the purchase Behavior depicts the best cluster statistics , however we get to know only about loyal and non loyal customers and their trends. If we can understand their basis of purchase, better strategies can be made to gather the attention from the customers.
+
+CRISA is a marketing agency and owns the data, which it collected at considerable expense, so it will want to be able to use both the data and the segmentation analysis in different ways for different clients.
+
+
+
+Lets, Understand the characteristics of the combined data for Purchase Behavior and Basis of purchase based on the demographics.
+Since ,we have already analyzed and Interpreted the clusters based on the purchase behavior and Basis of purchase.Here , we will focus on the demographics and will Interpret based on previous analysis regarding brand loyalty and basis of purchase.
+
+#### 6.1 Adding Demographics data into the combined dataset 
+
+```{r}
+Basis_Behaviour_Purchase_df2<-cbind.data.frame(Basis_Behaviour_Purchase_df,BathSoap[,c(2:11)])
+
+Basis_Behaviour_Purchase_df2<- as.matrix(Basis_Behaviour_Purchase_df2)
+
+#Adding new column 'cluster' to mention the cluster no. in dataset
+Basis_Behaviour_Purchase_df2 <- data.frame(Basis_Behaviour_Purchase_df2,
+cluster = as.factor(kmeans5_Basis_Behaviour_Purchase$cluster))
+
+table(kmeans5_Basis_Behaviour_Purchase$cluster)
+```
+##### 1.Gender
+```{r}
+##Gender
+barplot(table(Basis_Behaviour_Purchase_df2$SEX,Basis_Behaviour_Purchase_df2$cluster),
+        main="Gender",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=c("darkblue","red","yellow"),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$SEX,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+We can see that , Females does the purchase the most among all the clusters, regardless weather they are brand loyal or they responds to selling proposition and offers.
+
+##### 2.Age
+```{r}
+##Age
+barplot(table(Basis_Behaviour_Purchase_df2$AGE,Basis_Behaviour_Purchase_df2$cluster),
+        main="Age",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=c("darkblue","red","yellow","pink"),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$AGE,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+We can see that , Age group 4 are the highest in all the clusters . Therefore,They are doing most of the purchases.
+
+##### 3.Socioeconomic
+```{r}
+##Socio economic
+barplot(table(Basis_Behaviour_Purchase_df2$SEC,Basis_Behaviour_Purchase_df2$cluster),
+        main="Socio economic",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$SEC,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+Cluster 4 ,Cluster 5, cluster 2 and Cluster 3 has customers with  high socio economic status.
+CLuster 1 has poor socio economic status.
+
+
+##### 4.Affluence Index
+```{r}
+## Affluence Index
+barplot(table(Basis_Behaviour_Purchase_df2$Affluence.Index,Basis_Behaviour_Purchase_df2$cluster),
+        main=" Affluence Index",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$Affluence.Index,Basis_Behaviour_Purchase_df2$cluster)))
+
+```
+Interpretation:
+
+As per the chart it is clear that there is no trend or pattern in Affluence Index among all the clusters and it looks like a rainbow.
+
+
+##### 5.Education
+```{r}
+## Education
+barplot(table(Basis_Behaviour_Purchase_df2$EDU,Basis_Behaviour_Purchase_df2$cluster),
+        main="Education",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(12),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$EDU,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+Most of the people with Education level=5(college graduate) tends to  be purchasing more in cluster 1,2,4.
+
+
+##### 6.Mother Tongue
+```{r}
+## Mother Tongue
+barplot(table(Basis_Behaviour_Purchase_df2$MT,Basis_Behaviour_Purchase_df2$cluster),
+        main="Mother Tongue",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$MT,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+It seems that Language 10 seems to be dominating among all the clusters.Maybe most of the cities covered in the survey were in the same regional state of India.
+
+##### 7.Household members
+```{r}
+## Number of Members in a household
+barplot(table(Basis_Behaviour_Purchase_df2$HS,Basis_Behaviour_Purchase_df2$cluster),
+        main="Number of members in household",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$HS,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+CLuster 1 and 4 have average household family size of 3-4 which does most of the shopping.However ,a family size of 5 is quite dominating among all the clusters.
+
+##### 8.Eating habbits
+```{r}
+## Eating Habbits
+barplot(table(Basis_Behaviour_Purchase_df2$FEH,Basis_Behaviour_Purchase_df2$cluster),
+        main="Eating Habbits",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$FEH,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+Large amount of people eating non-vegetarian food among all the clusters seems to purchase the items.
+
+##### 9.Availability of TV
+```{r}
+## Availability of TV
+barplot(table(Basis_Behaviour_Purchase_df2$CS,Basis_Behaviour_Purchase_df2$cluster),
+        main="Availability of TV",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=c("darkblue","red","yellow"),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$CS,Basis_Behaviour_Purchase_df2$cluster)))
+```
+Interpretation:
+ As we can see that TV is available in higher numbers for all the clusters.Therefore,Most of the customers have TV as per the data collected by CRISA.
+ 
+##### 10.Number of Children
+```{r}
+## Number of Children
+barplot(table(Basis_Behaviour_Purchase_df2$CHILD,Basis_Behaviour_Purchase_df2$cluster),
+        main=" Number of children",
+        xlab="Clusters",
+        ylab="Count of people",
+        col=rainbow(10),
+        legend=rownames(table(Basis_Behaviour_Purchase_df2$CHILD,Basis_Behaviour_Purchase_df2$cluster)))
+
+```
+
+Interpretation:The households having 4-5 children are doing more purchase among all the clusters.
+
+
+
+
+##### Observations:
+
++ 1.Most of the consumers are female,thus most of the ads should target for women.
+
++ 2.Most of the customers are not loyal they buy Value added packs.
+
++ 3.Most of the customers have TV, advertisement can be broadcaster.
+
++ 4.Client should promote their brands by gifting coupon or exchange offers.
+
+
+##### Observations specific to clusters:-
+
+* Cluster 1:
+
++ Cluster of customer show high  brand loyalty and  sometimes not loyalty we can say that its a neutral cluster, does not responds to promotional offers but responds to selling propositions.
+
++ Demographically it is the lowest socio economic group with majority of the people have poor education or college passout.
+
+
+* CLuster 2:
+
++ Again ,the Customers ares Non Loyal to the Brands and interestingly do not responds to the promotional offers and highly responds to the price Category1.
+
++ Demographically it is upper middle socio economic status with a family of 3-4 members with highest majority of women and most of them are educated.
+
+
+* Cluster 3:
+
++ Brand Loyal customers with higher transaction brand runs  , does not responds to Promotional offers and does shopping Price          category3.
+
++ Demographically it is high socio economic to upper middle majority group with basic education level in majority.(level 3-4)
+
+
+* Cluster 4:
+
++ Non brand loyal customers purchasing other brands in high volume and responding to price category 2.
+
++ Demographically it is high socio economic group with 4 household members and basic education level.
+
+
+
+* Cluster 5:
+
++ Non Brand Loyal customers purchasing high numbers of different brands and responding to promotional and price category 1 and chosen selling proposition.
+
++ Demographically it is high socio economic class in majority and customers are mostly college students and higher studies.
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+
+#### 7. Develop a model that classifies the data into these segments. Since this information would most likely be used in targeting direct-mail promotions, it would be useful to select a market segment that would be defined as a success in the classification model.
+
+
+
+
+Choosing a cluster(market segment) that would be defined as Success:
+Based on the clusters features , we can see a major difference by the Brand loyalty, secondly the relation with socio economic status.
+
+
+We can have multiple approaches for promotions for these customers segments .For example :
+
+
++ 1.Focusing on the Brand Loyal customers with high socio economic status:
+Based on their purchase behaviour , clients can target these customers with customized approach for them.
+
+
++ 2.Focusing on the Non Brand loyal customers with high socio economic status:
+These group of customers gives a great opportunity to the Client to grow there business by making wise decision on the promotions.
+
+
+
+Therefore, I would like to choose, Cluster 4 which is non brand loyal customer group with high socio economic status with transaction volume  and they responds to the promotional offers and selling propositions. Majority of them are women and educated.
+
+#### 7.1 Preprocessing the data
+```{r}
+
+#Creating a variable for the Combination dataset with demographics
+BathSoap_Model<-Basis_Behaviour_Purchase_df2
+
+# The selected cluster == 5.Therefore, we need to  update the cluster details to 1's,0's.To predict it specifically.
+
+BathSoap_Model$cluster=ifelse(BathSoap_Model$cluster=="4",1,0)
+#Factorization of data
+
+BathSoap_Model$cluster<-as.factor(BathSoap_Model$cluster)
+BathSoap_Model$SEC<-as.factor(BathSoap_Model$SEC)
+BathSoap_Model$FEH<-as.factor(BathSoap_Model$FEH)
+BathSoap_Model$MT<-as.factor(BathSoap_Model$MT)
+BathSoap_Model$SEX<-as.factor(BathSoap_Model$SEX)
+BathSoap_Model$AGE<-as.factor(BathSoap_Model$AGE)
+BathSoap_Model$EDU<-as.factor(BathSoap_Model$EDU)
+BathSoap_Model$HS<-as.factor(BathSoap_Model$HS)
+BathSoap_Model$CHILD<-as.factor(BathSoap_Model$CHILD)
+BathSoap_Model$CS<-as.factor(BathSoap_Model$CS)
+BathSoap_Model$Affluence.Index<-as.factor(BathSoap_Model$Affluence.Index)
+
+
+```
+#### 7.2 partitioning the dataset into train and validation set
+```{r}
+
+set.seed(777)
+#Partitioning the dataset to build a model and predict on the validation dataset
+partition<- createDataPartition(BathSoap_Model$No..of.Brands,p=0.6,list=FALSE)
+
+train_data<- BathSoap_Model[partition,]
+validation_data<- BathSoap_Model[-partition,]
+
+#Checking the count of the partitioned data
+nrow(validation_data)
+nrow(train_data)
+```
+
+
+
+##### 7.3 Naive Bayes Modelling
+
+Naive Bayes is easy and fast to predict class of test data set. It performs well in case of categorical input variables compared to numerical variable(s) and we have Demographics data in the dataset.
+
+
+So let's try this model and check the results .
+
+
+```{r,message=FALSE}
+set.seed(3689)
+# Building Naive Bayes Model
+nb_model<-naiveBayes(cluster~., data=train_data)
+
+# Prediction
+Predicted_Test_labels <-predict(nb_model,validation_data)
+validation_data<-as.data.frame(validation_data)
+
+# Show the confusion matrix of the classifier
+confusionMatrix(validation_data$cluster,Predicted_Test_labels)
+```
+#### 7.4 Results:
+1.Accuracy is 88 % with Sensitivity of 96% and Specificity of 66%.Error type I and Error Type II are 20 and 7.
+
+
+* An ROC curve is a graph showing the performance of a classification model at all classification thresholds. This curve plots two parameters: True Positive Rate. False Positive Rate.
+
++ Let's determine the ROC curve :
+
+```{r}
+set.seed(123)
+table(validation_data$cluster)
+ # ROC curve
+Predicted_Test_2labels <-predict(nb_model,validation_data, type = "raw")
+table(Predicted_Test_2labels==1)
+
+roc(validation_data$cluster, Predicted_Test_2labels[,2])
+plot.roc(validation_data$cluster,Predicted_Test_2labels[,2])
+```
+
+##### Result:
+
++ The AUC for ROC is 94%, which is an excellent score as it is very close  to 1.
+
+
+#### Conclusion:
+Therefore, based on the results we can say that,Naive Bayes model is effective in classifying data.Also, the model is not 100% accurate , it has an accuracy of 88%.The Clients can target those  segment based customers from  the model.
+
+
